@@ -1,10 +1,10 @@
 /**
- * Ascandir - Rest Manager
+ * Ascandir - DnD5e Rest Manager
  * Gemeinsame lange Rast mit Rationen / Lagervorräten für D&D 5e.
  * Foundry VTT v14 · dnd5e 6.x
  */
 
-const MOD = "ascandir-rest-manager";
+const MOD = "ascandir-dnd5e-rest-manager";
 /** Wird beim Veröffentlichen automatisch durch die Versionsnummer ersetzt. */
 const CODE_VERSION = "__VERSION__";
 const SOCKET = `module.${MOD}`;
@@ -143,7 +143,7 @@ const enqueue = (fn) => (queue = queue.then(fn).catch((err) => console.error(`${
 function request(action, data = {}) {
   const payload = { action, data, userId: game.user.id };
   if (game.user.isActiveGM) return enqueue(() => handleRequest(payload));
-  if (!game.users.activeGM) return ui.notifications.warn("Rest Manager: Kein Spielleiter online.");
+  if (!game.users.activeGM) return ui.notifications.warn("DnD5e Rest Manager: Kein Spielleiter online.");
   game.socket.emit(SOCKET, payload);
 }
 
@@ -544,7 +544,7 @@ class SupplyConfigApp extends ApplicationV2 {
     tag: "form",
     classes: ["camp-rest-config"],
     window: {
-      title: "Rest Manager: Rationen & Lagervorräte",
+      title: "DnD5e Rest Manager: Rationen & Lagervorräte",
       icon: "fa-solid fa-drumstick-bite",
       resizable: true,
       contentClasses: ["standard-form"]
@@ -660,7 +660,7 @@ class SupplyConfigApp extends ApplicationV2 {
     this.#readForm();
     this.cfg.entries = this.cfg.entries.filter((e) => e.name.trim());
     await game.settings.set(MOD, "supplyConfig", this.cfg);
-    ui.notifications.info("Rest Manager: Vorräte gespeichert.");
+    ui.notifications.info("DnD5e Rest Manager: Vorräte gespeichert.");
   }
 }
 
@@ -670,7 +670,7 @@ class PenaltyConfigApp extends ApplicationV2 {
     tag: "form",
     classes: ["camp-rest-config"],
     window: {
-      title: "Rest Manager: Strafe bei fehlenden Vorräten",
+      title: "DnD5e Rest Manager: Strafe bei fehlenden Vorräten",
       icon: "fa-solid fa-gavel",
       resizable: true,
       contentClasses: ["standard-form"]
@@ -731,7 +731,7 @@ class PenaltyConfigApp extends ApplicationV2 {
       exhaustion: Math.max(0, Math.floor(Number(get("exhaustion").value) || 0)),
       message: get("message").value
     });
-    ui.notifications.info("Rest Manager: Strafe gespeichert.");
+    ui.notifications.info("DnD5e Rest Manager: Strafe gespeichert.");
   }
 }
 
@@ -783,13 +783,13 @@ Hooks.once("init", () => {
 /** Einstellungen aus der alten Modulversion ("rest-manager-by-ascandir") übernehmen. */
 async function migrateOldSettings() {
   if (!game.user.isActiveGM) return;
-  const OLD = "rest-manager-by-ascandir";
+  const OLD_IDS = ["ascandir-rest-manager", "rest-manager-by-ascandir"];   // neueste zuerst
   const stored = game.settings.storage.get("world");
   const isStored = (key) => !!stored?.find((s) => s.key === key);
   let moved = 0;
   for (const name of ["supplyConfig", "penaltyConfig"]) {
     if (isStored(`${MOD}.${name}`)) continue;            // schon eigene Werte vorhanden
-    const old = stored?.find((s) => s.key === `${OLD}.${name}`);
+    const old = OLD_IDS.map((id) => stored?.find((s) => s.key === `${id}.${name}`)).find(Boolean);
     if (!old) continue;
     let value = old.value;
     if (typeof value === "string") {
@@ -799,14 +799,14 @@ async function migrateOldSettings() {
     await game.settings.set(MOD, name, value);
     moved++;
   }
-  if (moved) ui.notifications.info("Ascandir - Rest Manager: Einstellungen aus der alten Version übernommen.");
+  if (moved) ui.notifications.info("Ascandir - DnD5e Rest Manager: Einstellungen aus der alten Version übernommen.");
 }
 
 /** Warnen, wenn ein Client noch alte Moduldateien aus dem Zwischenspeicher lädt. */
 function checkStaleCache() {
   const installed = game.modules.get(MOD)?.version;
   if (!installed || CODE_VERSION.startsWith("__") || installed === CODE_VERSION) return;
-  ui.notifications.warn(`Ascandir - Rest Manager: Dieser Client nutzt noch alte Dateien (${CODE_VERSION} statt ${installed}). `
+  ui.notifications.warn(`Ascandir - DnD5e Rest Manager: Dieser Client nutzt noch alte Dateien (${CODE_VERSION} statt ${installed}). `
     + "Bitte mit Strg+Shift+R bzw. Strg+F5 neu laden.", { permanent: true });
 }
 
