@@ -1,9 +1,13 @@
 name: Release
 
 # Neue Version veröffentlichen:
-#   GitHub → Reiter "Actions" → links "Release" → "Run workflow" → Versionsnummer eintragen (z. B. 1.0.0) → grüner Knopf.
+#   Automatisch, sobald auf main eine neue Version in module.json landet (gibt es das Release schon, passiert nichts).
+#   Oder: GitHub → Reiter "Actions" → links "Release" → "Run workflow" → Versionsnummer eintragen (z. B. 1.0.0) → grüner Knopf.
 # Alternativ läuft es auch, wenn auf GitHub von Hand ein Release veröffentlicht wird.
 on:
+  push:
+    branches: [main]
+    paths: [module.json]
   workflow_dispatch:
     inputs:
       version:
@@ -27,17 +31,29 @@ jobs:
 
       - name: Version bestimmen
         id: v
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             V="${{ github.event.inputs.version }}"
+          elif [ "${{ github.event_name }}" = "push" ]; then
+            V=$(jq -r .version module.json)
           else
             V="${GITHUB_REF_NAME}"
           fi
           V="${V#v}"
           echo "version=$V" >> "$GITHUB_OUTPUT"
           echo "tag=v$V" >> "$GITHUB_OUTPUT"
+          # Bei einem Push nur bauen, wenn es diese Version noch nicht gibt
+          if [ "${{ github.event_name }}" = "push" ] && gh release view "v$V" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release v$V existiert bereits – nichts zu tun."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Version und Links in module.json eintragen
+        if: steps.v.outputs.skip == 'false'
         run: |
           REPO="${{ github.repository }}"
           TAG="${{ steps.v.outputs.tag }}"
@@ -49,12 +65,15 @@ jobs:
           mv tmp.json module.json
 
       - name: Versionsnummer in den Code schreiben
+        if: steps.v.outputs.skip == 'false'
         run: sed -i "s/__VERSION__/${{ steps.v.outputs.version }}/g" scripts/main.js styles/camp.css
 
       - name: Modul packen
+        if: steps.v.outputs.skip == 'false'
         run: zip -r module.zip module.json scripts styles assets fonts README.md
 
       - name: Release erstellen und Dateien anhängen
+        if: steps.v.outputs.skip == 'false'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.v.outputs.tag }}
