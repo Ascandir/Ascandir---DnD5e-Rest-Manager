@@ -535,6 +535,25 @@
    Einstellungsfenster – Foundry-Standard, nur das Layout der Liste
    ===================================================================== */
 
+/* Fenster nie höher als der Bildschirm: Inhalt scrollt, Speichern-Knöpfe bleiben unten sichtbar */
+.camp-rest-config.application { max-height: calc(100vh - 40px); }
+.camp-rest-config .window-content {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+.camp-rest-config .cr-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--form-gap, 0.5rem);
+  padding-right: 4px;
+}
+.camp-rest-config .form-footer { flex: 0 0 auto; }
+
 .camp-rest-config .cr-entry-head,
 .camp-rest-config .cr-entry .form-fields {
   display: grid;

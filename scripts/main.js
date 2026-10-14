@@ -567,7 +567,7 @@ class SupplyConfigApp extends ApplicationV2 {
             data-tooltip="Entfernen" aria-label="Entfernen"></button>
         </div>
       </div>`).join("");
-    return `
+    return `<div class="cr-scroll">
       <p class="hint">Diese Gegenstände zählen bei der langen Rast als Ration oder Lagervorrat.</p>
       <fieldset>
         <legend>Allgemein</legend>
@@ -600,6 +600,7 @@ class SupplyConfigApp extends ApplicationV2 {
         <button type="button" data-action="addRow"><i class="fa-solid fa-plus"></i> Zeile hinzufügen</button>
         <p class="hint">„Wert“ = wie viele Vorrats-Punkte ein Stück liefert.</p>
       </fieldset>
+      </div>
       <footer class="form-footer">
         <button type="button" data-action="reset"><i class="fa-solid fa-rotate-left"></i><span>Standard wiederherstellen</span></button>
         <button type="submit"><i class="fa-solid fa-floppy-disk"></i><span>Speichern</span></button>
@@ -687,7 +688,7 @@ class PenaltyConfigApp extends ApplicationV2 {
         <div class="form-fields"><input type="checkbox" id="cr-${name}" name="${name}" ${p[name] ? "checked" : ""}></div>
         ${hint ? `<p class="hint">${hint}</p>` : ""}
       </div>`;
-    return `
+    return `<div class="cr-scroll">
       <p class="hint">Diese Strafe bekommt jeder Charakter, der zu wenig Vorräte im Lager hat.
         Im Lagerfenster kannst du sie für einzelne Charaktere erlassen.</p>
       <fieldset>
@@ -713,6 +714,7 @@ class PenaltyConfigApp extends ApplicationV2 {
           <p class="hint">{name} wird durch den Namen des Charakters ersetzt. Leer lassen = keine Nachricht.</p>
         </div>
       </fieldset>
+      </div>
       <footer class="form-footer">
         <button type="submit"><i class="fa-solid fa-floppy-disk"></i><span>Speichern</span></button>
       </footer>`;
