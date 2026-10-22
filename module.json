@@ -2,7 +2,7 @@
   "id": "ascandir-dnd5e-rest-manager",
   "title": "Ascandir - DnD5e Rest Manager",
   "description": "Überarbeitete lange Rast für D&D 5e: Der SL fragt eine lange Rast an, die Gruppe legt Rationen und Lagervorräte gemeinsam ins Lager. Wer nicht versorgt ist, erhält eine vom SL festgelegte Strafe.",
-  "version": "0.1.17",
+  "version": "0.1.18",
   "authors": [
     {
       "name": "Ascandir"

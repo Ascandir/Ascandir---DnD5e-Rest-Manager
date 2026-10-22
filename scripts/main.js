@@ -262,13 +262,16 @@ async function startRequest() {
   });
 }
 
-async function cancelRequest() {
-  const ok = await DialogV2.confirm({
-    window: { title: "Rastanfrage abbrechen" },
-    content: "<p>Die Anfrage abbrechen? Es werden keine Vorräte verbraucht.</p>",
-    rejectClose: false
-  });
-  if (!ok) return;
+async function cancelRequest({ confirm = true } = {}) {
+  if (!getState().active) return;
+  if (confirm) {
+    const ok = await DialogV2.confirm({
+      window: { title: "Rastanfrage abbrechen" },
+      content: "<p>Die Anfrage abbrechen? Es werden keine Vorräte verbraucht.</p>",
+      rejectClose: false
+    });
+    if (!ok) return;
+  }
   await setState({ active: false });
   await ChatMessage.create({ content: `<div class="camp-rest-chat"><p><i class="fa-solid fa-campground"></i> Die lange Rast wurde abgebrochen.</p></div>` });
 }
@@ -443,7 +446,16 @@ class CampRestApp extends ApplicationV2 {
   }
 
   static hide() {
-    if (this.instance?.rendered) this.instance.close();
+    // Vom Modul selbst geschlossen (Rast beendet/abgebrochen) – kein erneuter Abbruch
+    if (this.instance?.rendered) this.instance.close({ crProgrammatic: true });
+  }
+
+  /** Schließt der SL das Fenster selbst (X / Esc), wird die Rastanfrage direkt abgebrochen. */
+  async close(options = {}) {
+    const abort = game.user.isGM && !options.crProgrammatic && getState().active;
+    const result = await super.close(options);
+    if (abort) await cancelRequest({ confirm: false });
+    return result;
   }
 
   async _renderHTML() {
