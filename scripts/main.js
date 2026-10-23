@@ -237,7 +237,9 @@ async function startRequest() {
     </div>`;
 
   const ids = await DialogV2.wait({
-    window: { title: "Lange Rast anfragen", icon: "fa-solid fa-campground" },
+    window: { title: "Lange Rast anfragen", icon: "fa-solid fa-campground", resizable: true },
+    classes: ["camp-rest-picker"],
+    position: { width: 420 },
     content,
     rejectClose: false,
     buttons: [
