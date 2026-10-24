@@ -1,6 +1,6 @@
 # Ascandir - DnD5e Rest Manager
 
-Überarbeitete lange Rast für **Foundry VTT v14 (ausgelegt auf 14.368)** und **D&D 5e 6.0 (ausgelegt auf 6.0.6)**.
+Überarbeitete lange Rast für **Foundry VTT v14 (ausgelegt auf 14.369.1)** und **D&D 5e 6.0 (ausgelegt auf 6.0.6)**.
 
 ## Installation
 
