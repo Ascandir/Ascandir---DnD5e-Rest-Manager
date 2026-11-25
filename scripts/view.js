@@ -30,11 +30,16 @@ function card(m, vm) {
         ${m.waived ? '<i class="fa-solid fa-dove"></i> Strafe erlassen' : '<i class="fa-solid fa-gavel"></i> Strafe droht'}</button>`
     : "";
 
-  return `<section class="cr-card ${m.ok ? "ok" : "missing"}" data-actor-id="${esc(m.id)}">
+  const groupInfo = m.group
+    ? `<div class="cr-group-info" data-tooltip="${esc(m.group.tip)}"><i class="fa-solid fa-people-group"></i> ${esc(m.group.info)}</div>`
+    : "";
+
+  return `<section class="cr-card ${m.ok ? "ok" : "missing"} ${m.group ? "is-group" : ""}" data-actor-id="${esc(m.id)}">
     <span class="cr-check ${m.ok ? "on" : ""}" data-tooltip="${m.ok ? "Versorgt" : "Noch nicht versorgt"}"></span>
     <div class="cr-portrait"><img src="${esc(m.img)}" alt=""></div>
     <div class="cr-plate"><span>${esc(m.name)}</span></div>
-    <div class="cr-count" data-tooltip="Größe: ${esc(m.size)} · benötigt ${fmt(m.required)}"><span class="cr-bread"></span><b>${fmt(m.have)}/${fmt(m.required)}</b></div>
+    <div class="cr-count" data-tooltip="${m.group ? "Bedarf aller Mitglieder" : `Größe: ${esc(m.size)}`} · benötigt ${fmt(m.required)}"><span class="cr-bread"></span><b>${fmt(m.have)}/${fmt(m.required)}</b></div>
+    ${groupInfo}
     ${pledges ? `<ul class="cr-pledges">${pledges}</ul>` : ""}
     <div class="cr-drop"><span class="cr-sack"></span><span>Vorräte hineinziehen</span></div>
     ${penalty}

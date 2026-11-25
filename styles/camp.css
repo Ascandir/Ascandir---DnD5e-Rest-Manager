@@ -398,6 +398,19 @@
 #camp-rest-app .cr-count { display: flex; align-items: center; gap: 12px; margin-top: 5px; height: 28px; font-size: 1.4rem; }
 #camp-rest-app .cr-count b { font-weight: 700; color: #8c1c14; }
 #camp-rest-app .cr-card.ok .cr-count b { color: #2f6b1f; }
+#camp-rest-app .cr-group-info {
+  max-width: 100%;
+  margin-top: 1px;
+  padding: 0 4px;
+  font-size: 0.78rem;
+  line-height: 1.2;
+  color: #3b2814;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#camp-rest-app .cr-group-info i { color: #6b4f22; margin-right: 2px; }
 #camp-rest-app .cr-pledges { list-style: none; margin: 1px 0 0; padding: 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 2px 12px; }
 #camp-rest-app .cr-pledges li { display: inline-flex; align-items: center; gap: 7px; height: 24px; }
 #camp-rest-app .cr-token {
@@ -599,6 +612,11 @@
   overflow-y: auto;
   padding-right: 6px;
 }
+.camp-rest-pick .hint { margin: 0.1rem 0 0.3rem; font-size: 0.8rem; opacity: 0.8; }
+.camp-rest-pick-group { display: flex; flex-direction: column; gap: 0.2rem; padding: 0.3rem 0 0.4rem; border-bottom: 1px dashed rgba(127, 127, 127, 0.35); }
+.camp-rest-pick-meta { margin-left: auto; font-size: 0.8rem; opacity: 0.75; white-space: nowrap; }
+.camp-rest-pick-source { padding-left: 1.6rem; font-size: 0.85rem; }
+.camp-rest-pick-source select { flex: 1; min-width: 0; }
 .camp-rest-picker.application { max-height: calc(100vh - 20px); }
 .camp-rest-pick h4 { margin: 0.4rem 0 0; border-bottom: 1px solid currentColor; opacity: 0.85; }
 .camp-rest-pick label { display: flex; align-items: center; gap: 0.4rem; }

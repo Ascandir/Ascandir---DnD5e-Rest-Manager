@@ -24,6 +24,16 @@ Schließt der **SL** das Lagerfenster über das **X**, wird die Rastanfrage abge
 
 Spieler, die das Fenster geschlossen haben, öffnen es über **„Lager öffnen“** in der Akteure-Seitenleiste wieder.
 
+## Gruppen (Party) mitnehmen
+
+Im Fenster **„Lange Rast anfragen“** stehen unter **Gruppen** alle dnd5e-Gruppen-Akteure (Typ *Gruppe*).
+
+- **Bedarf:** wird aus allen Mitgliedern nach ihrer Größe berechnet (Einstellung „Bedarf nach Kreaturengröße“), z. B. 30 Söldner (mittelgroß, je 1) + 10 Pferde/Kühe (groß, je 2) = 50.
+- **Rationen aus:** Akteur wählen, aus dessen Inventar die Rationen automatisch genommen werden – z. B. das Gruppeninventar selbst oder ein eigener Lager-/Wagen-Akteur. Alternativ „nur von Hand“: dann legen Spieler die Rationen auf die Gruppenkarte.
+- Reicht es nicht, können Spieler zusätzlich Rationen auf die Gruppenkarte ziehen.
+- Mitglieder, die auch einzeln teilnehmen (z. B. Spielercharaktere), zählen nicht doppelt.
+- Bei der Rast werden die Mitglieder der Reihe nach versorgt; wer leer ausgeht, bekommt die eingestellte Strafe (der SL kann sie auf der Gruppenkarte erlassen). Statt 40 einzelner Chatkarten kommt eine Sammelnachricht pro Gruppe.
+
 ## Einstellungen (nur SL)
 
 *Spieleinstellungen → Moduleinstellungen → Ascandir - DnD5e Rest Manager*

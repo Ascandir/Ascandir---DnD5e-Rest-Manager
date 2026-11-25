@@ -128,6 +128,88 @@ function requiredFor(actorOrId, cfg = getSupplies()) {
   return Math.max(0, Number(v ?? cfg.required) || 0);
 }
 
+/* -------------------------------------------- */
+/*  Gruppen (Party) & automatische Entnahme     */
+/* -------------------------------------------- */
+
+const isGroupActor = (a) => a?.type === "group";
+
+/** Mitglieder einer Gruppe (dnd5e: system.members = [{ actor }]). */
+function groupMembers(group) {
+  const list = group?.system?.members ?? [];
+  return list.map((m) => m?.actor).filter((a) => a && !isGroupActor(a));
+}
+
+/** Ist ein Teilnehmer eine Gruppe? (ältere Anfragen kennen kein "kind") */
+const isGroupEntry = (p) => p?.kind === "group";
+
+/** IDs aller Akteure, die einzeln an der Rast teilnehmen (zählen in Gruppen nicht doppelt). */
+function individualIds(state) {
+  return new Set((state.participants ?? []).filter((p) => !isGroupEntry(p)).map((p) => p.id));
+}
+
+/** Bedarf jedes Gruppenmitglieds (ohne die, die einzeln teilnehmen). */
+function groupNeeds(groupId, state, cfg = getSupplies()) {
+  const group = game.actors.get(groupId);
+  const skip = individualIds(state);
+  return groupMembers(group).filter((a) => !skip.has(a.id))
+    .map((a) => ({ actor: a, need: requiredFor(a, cfg) }));
+}
+
+/** Bedarf eines Teilnehmers (Einzelner oder ganze Gruppe). */
+function requiredForEntry(p, state, cfg = getSupplies()) {
+  if (isGroupEntry(p)) return groupNeeds(p.id, state, cfg).reduce((s, m) => s + m.need, 0);
+  return requiredFor(p.id, cfg);
+}
+
+/**
+ * Rationen automatisch aus dem gewählten Akteur (z. B. Gruppenlager) zuteilen.
+ * Wird bei jedem Zeichnen und beim Abschluss neu berechnet, damit es zum aktuellen Inventar passt.
+ * @returns {{byEntry: Map<string,{points:number,use:Array}>, byItem: Map<string,number>}}
+ */
+function allocateAuto(state, cfg = getSupplies()) {
+  const byEntry = new Map();
+  const byItem = new Map();
+  for (const p of state.participants ?? []) {
+    if (!p.sourceId) continue;
+    const source = game.actors.get(p.sourceId);
+    if (!source) continue;
+    let remaining = requiredForEntry(p, state, cfg) - suppliedFor(state, p.id);
+    const use = [];
+    let points = 0;
+    for (const item of source.items.contents) {
+      if (remaining <= 0) break;
+      const value = supplyValue(item);
+      if (value <= 0) continue;
+      const avail = (Number(item.system.quantity) || 0) - pledgedOf(state, item.uuid) - (byItem.get(item.uuid) ?? 0);
+      if (avail <= 0) continue;
+      const qty = Math.min(avail, Math.ceil(remaining / value));
+      remaining -= qty * value;
+      points += qty * value;
+      byItem.set(item.uuid, (byItem.get(item.uuid) ?? 0) + qty);
+      use.push({ itemUuid: item.uuid, qty });
+    }
+    byEntry.set(p.id, { points, use });
+  }
+  return { byEntry, byItem };
+}
+
+/** Vorrats-Punkte, die im gewählten Akteur insgesamt noch frei sind. */
+function sourcePoints(actor, state, auto) {
+  if (!actor) return 0;
+  return actor.items.contents.reduce((sum, i) => {
+    const v = supplyValue(i);
+    if (v <= 0) return sum;
+    const free = (Number(i.system.quantity) || 0) - pledgedOf(state, i.uuid) - (auto?.byItem.get(i.uuid) ?? 0);
+    return sum + Math.max(0, free) * v;
+  }, 0);
+}
+
+/** Akteure, die Rationen o. Ä. im Inventar haben (Auswahl „Rationen aus“). */
+function actorsWithSupplies() {
+  return game.actors.filter((a) => a.items?.some((i) => supplyValue(i) > 0));
+}
+
 function maxExhaustion() {
   return CONFIG.DND5E?.conditionTypes?.exhaustion?.levels ?? 6;
 }
@@ -172,7 +254,8 @@ async function handleRequest({ action, data, userId }) {
       if (!state.participants.some((p) => p.id === data.toActorId)) return;
 
       const qty = Math.max(1, Math.floor(Number(data.qty) || 1));
-      const available = (Number(item.system.quantity) || 0) - pledgedOf(state, item.uuid);
+      const reservedAuto = allocateAuto(state).byItem.get(item.uuid) ?? 0;
+      const available = (Number(item.system.quantity) || 0) - pledgedOf(state, item.uuid) - reservedAuto;
       if (available < qty) {
         return notifyUser(userId, `Nicht genug ${item.name} übrig (noch ${Math.max(available, 0)} verfügbar).`);
       }
@@ -225,39 +308,75 @@ async function startRequest() {
   }
   const chars = game.actors.filter((a) => a.type === "character" && a.hasPlayerOwner);
   const companions = game.actors.filter((a) => a.type === "npc" && a.hasPlayerOwner);
-  if (!chars.length && !companions.length) return ui.notifications.warn("Keine Spielercharaktere gefunden.");
+  const groups = game.actors.filter((a) => isGroupActor(a) && groupMembers(a).length);
+  if (!chars.length && !companions.length && !groups.length) return ui.notifications.warn("Keine Spielercharaktere oder Gruppen gefunden.");
 
+  const cfg = getSupplies();
+  const stocked = actorsWithSupplies();
   const row = (a, checked) => `
       <label><input type="checkbox" name="p" value="${a.id}" ${checked ? "checked" : ""}>
       <img src="${esc(a.img)}" width="28" height="28"> ${esc(a.name)}</label>`;
+  const groupRow = (g) => {
+    const members = groupMembers(g);
+    const need = members.reduce((s, m) => s + requiredFor(m, cfg), 0);
+    const options = [g, ...stocked.filter((a) => a.id !== g.id)]
+      .map((a) => `<option value="${a.id}">${esc(a.id === g.id ? `${a.name} (Gruppeninventar)` : a.name)}</option>`).join("");
+    return `<div class="camp-rest-pick-group">
+        <label><input type="checkbox" name="g" value="${g.id}">
+        <img src="${esc(g.img)}" width="28" height="28"> ${esc(g.name)}
+        <span class="camp-rest-pick-meta">${members.length} Mitglieder · Bedarf ${need}</span></label>
+        <label class="camp-rest-pick-source">Rationen aus
+          <select name="src.${g.id}">${options}<option value="">– nur von Hand ins Lager legen –</option></select></label>
+      </div>`;
+  };
   const content = `<p>Wer nimmt an der langen Rast teil?</p>
     <div class="camp-rest-pick">
       ${chars.length ? `<h4>Charaktere</h4>${chars.map((a) => row(a, true)).join("")}` : ""}
       ${companions.length ? `<h4>Begleiter &amp; Reittiere</h4>${companions.map((a) => row(a, false)).join("")}` : ""}
+      ${groups.length ? `<h4>Gruppen</h4><p class="hint">Der Bedarf ergibt sich aus allen Mitgliedern nach ihrer Größe.
+        Mitglieder, die oben einzeln teilnehmen, zählen nicht doppelt.</p>${groups.map(groupRow).join("")}` : ""}
     </div>`;
 
-  const ids = await DialogV2.wait({
+  const picked = await DialogV2.wait({
     window: { title: "Lange Rast anfragen", icon: "fa-solid fa-campground", resizable: true },
     classes: ["camp-rest-picker"],
-    position: { width: 420 },
+    position: { width: 480 },
     content,
     rejectClose: false,
     buttons: [
       {
         action: "ok", label: "Anfrage senden", icon: "fa-solid fa-paper-plane", default: true,
-        callback: (event, button) => [...button.form.querySelectorAll('input[name="p"]:checked')].map((i) => i.value)
+        callback: (event, button) => {
+          const f = button.form;
+          return {
+            ids: [...f.querySelectorAll('input[name="p"]:checked')].map((i) => i.value),
+            groups: [...f.querySelectorAll('input[name="g"]:checked')].map((i) => ({
+              id: i.value, sourceId: f.querySelector(`select[name="src.${i.value}"]`)?.value || null
+            }))
+          };
+        }
       },
       { action: "cancel", label: "Abbrechen", icon: "fa-solid fa-xmark" }
     ]
   });
-  if (!Array.isArray(ids) || !ids.length) return;
+  if (!picked || (!picked.ids.length && !picked.groups.length)) return;
 
-  const participants = ids.map((id) => game.actors.get(id)).filter(Boolean)
-    .map((a) => ({ id: a.id, name: a.name, img: a.img }));
+  const participants = [
+    ...picked.ids.map((id) => game.actors.get(id)).filter(Boolean)
+      .map((a) => ({ id: a.id, name: a.name, img: a.img, kind: "actor" })),
+    ...picked.groups.map((g) => ({ ...g, actor: game.actors.get(g.id) })).filter((g) => g.actor)
+      .map((g) => ({ id: g.id, name: g.actor.name, img: g.actor.img, kind: "group", sourceId: g.sourceId }))
+  ];
 
-  await setState({ active: true, id: foundry.utils.randomID(), participants, pledges: [], noPenalty: {}, rev: 1 });
-  const cfg = getSupplies();
-  const needs = participants.map((p) => `<li>${esc(p.name)}: <strong>${requiredFor(p.id, cfg)}</strong></li>`).join("");
+  const newState = { active: true, id: foundry.utils.randomID(), participants, pledges: [], noPenalty: {}, rev: 1 };
+  await setState(newState);
+  const needs = participants.map((p) => {
+    const need = requiredForEntry(p, newState, cfg);
+    if (!isGroupEntry(p)) return `<li>${esc(p.name)}: <strong>${need}</strong></li>`;
+    const source = p.sourceId ? game.actors.get(p.sourceId) : null;
+    return `<li>${esc(p.name)} (${groupNeeds(p.id, newState, cfg).length} Mitglieder): <strong>${need}</strong>`
+      + `${source ? ` – aus „${esc(source.name)}“` : ""}</li>`;
+  }).join("");
   await ChatMessage.create({
     content: `<div class="camp-rest-chat"><h3><i class="fa-solid fa-campground"></i> Lange Rast angefragt</h3>
       <p>Legt eure Rationen und Lagervorräte ins Lager! Bedarf je nach Größe:</p><ul>${needs}</ul></div>`
@@ -283,28 +402,43 @@ async function finishRest() {
   if (!state.active) return;
   const cfg = getSupplies();
   const penalty = getPenalty();
+  const auto = allocateAuto(state, cfg);
 
   const rows = state.participants.map((p) => {
-    const have = suppliedFor(state, p.id);
-    const required = requiredFor(p.id, cfg);
-    const short = have < required;
-    const punished = short && !state.noPenalty?.[p.id];
-    return { ...p, have, required, short, punished };
+    const have = suppliedFor(state, p.id) + (auto.byEntry.get(p.id)?.points ?? 0);
+    const required = requiredForEntry(p, state, cfg);
+    const waived = !!state.noPenalty?.[p.id];
+    if (!isGroupEntry(p)) {
+      const short = have < required;
+      return { ...p, have, required, short, punished: short && !waived };
+    }
+    // Gruppe: Mitglieder der Reihe nach versorgen, wer leer ausgeht, hungert
+    let budget = have;
+    const members = groupNeeds(p.id, state, cfg).map((m) => {
+      const fed = budget >= m.need;
+      if (fed) budget -= m.need;
+      return { actor: m.actor, fed, punished: !fed && !waived };
+    });
+    const hungry = members.filter((m) => !m.fed).length;
+    return { ...p, have, required, members, hungry, short: hungry > 0, punished: hungry > 0 && !waived };
   });
 
-  const list = rows.map((r) => `<li>${esc(r.name)}: ${r.have}/${r.required}
-    ${r.punished ? "<strong>– Strafe</strong>" : r.short ? "– unterversorgt, Strafe erlassen" : "✔"}</li>`).join("");
+  const list = rows.map((r) => {
+    const status = r.punished ? "<strong>– Strafe</strong>" : r.short ? "– unterversorgt, Strafe erlassen" : "✔";
+    const extra = isGroupEntry(r) ? ` (${r.members.length - r.hungry}/${r.members.length} Mitglieder satt)` : "";
+    return `<li>${esc(r.name)}: ${r.have}/${r.required}${extra} ${status}</li>`;
+  }).join("");
   const ok = await DialogV2.confirm({
     window: { title: "Lange Rast durchführen" },
-    content: `<p>Die lange Rast jetzt durchführen? Die eingelegten Vorräte werden verbraucht.</p><ul>${list}</ul>`,
+    content: `<p>Die lange Rast jetzt durchführen? Die eingelegten und zugeteilten Vorräte werden verbraucht.</p><ul>${list}</ul>`,
     rejectClose: false
   });
   if (!ok) return;
 
-  // 1) Vorräte abziehen
-  const byItem = new Map();
+  // 1) Vorräte abziehen (von Hand eingelegt + automatisch aus dem gewählten Akteur)
+  const byItem = new Map(auto.byItem);
   for (const p of state.pledges) byItem.set(p.itemUuid, (byItem.get(p.itemUuid) ?? 0) + p.qty);
-  const deleteEmpty = getSupplies().deleteEmpty;
+  const deleteEmpty = cfg.deleteEmpty;
   for (const [uuid, used] of byItem) {
     const item = await getDoc(uuid);
     if (!item) continue;
@@ -316,18 +450,38 @@ async function finishRest() {
   // 2) Fenster bei allen schließen
   await setState({ active: false });
 
-  // 3) Rasten
-  for (const r of rows) {
-    const actor = game.actors.get(r.id);
-    if (!actor) continue;
+  // 3) Rasten – Einzelne mit eigener Chatkarte, Gruppenmitglieder still mit Sammelnachricht
+  const rested = new Set();
+  const rest = async (actor, punished, { quiet = false } = {}) => {
+    if (!actor || rested.has(actor.id)) return;
+    rested.add(actor.id);
     try {
-      if (r.punished) await restWithPenalty(actor, penalty);
-      else await actor.longRest({ dialog: false, chat: true });
+      if (punished) await restWithPenalty(actor, penalty, { quiet });
+      else await actor.longRest({ dialog: false, chat: !quiet });
     } catch (err) {
       console.error(`${MOD} | Rast für ${actor.name} fehlgeschlagen`, err);
       ui.notifications.error(`Lange Rast für ${actor.name} fehlgeschlagen – siehe Konsole (F12).`);
     }
+  };
+  for (const r of rows.filter((x) => !isGroupEntry(x))) await rest(game.actors.get(r.id), r.punished);
+  for (const r of rows.filter((x) => isGroupEntry(x))) {
+    for (const m of r.members) await rest(m.actor, m.punished, { quiet: true });
+    await postGroupSummary(r, penalty);
   }
+}
+
+/** Eine Chatnachricht pro Gruppe statt einer pro Mitglied. */
+function postGroupSummary(row, pen) {
+  const hungry = row.members.filter((m) => !m.fed);
+  const fx = row.punished ? penaltyEffects(pen) : [];
+  return ChatMessage.create({
+    content: `<div class="camp-rest-chat ${hungry.length ? "penalty" : ""}">
+      <h3><i class="fa-solid fa-people-group"></i> ${esc(row.name)} rastet</h3>
+      <p>${row.members.length - hungry.length} von ${row.members.length} Mitgliedern sind satt (${row.have}/${row.required} Vorrats-Punkte).</p>
+      ${hungry.length ? `<p><strong>Hungrig:</strong> ${hungry.map((m) => esc(m.actor.name)).join(", ")}</p>
+        ${row.punished ? (fx.length ? `<p><em>${fx.join(" · ")}</em></p>` : "") : "<p><em>Strafe vom Spielleiter erlassen.</em></p>"}` : ""}
+    </div>`
+  });
 }
 
 /** Strafen, die beim nächsten Abschluss einer langen Rast angewendet werden (Akteur-ID -> Strafe). */
@@ -383,7 +537,7 @@ function penaltyEffects(pen) {
 }
 
 /** Lange Rast mit Strafe. */
-async function restWithPenalty(actor, pen) {
+async function restWithPenalty(actor, pen, { quiet = false } = {}) {
   if (pen.denyRest) {
     const levels = Math.max(0, Math.floor(Number(pen.exhaustion) || 0));
     if (levels) {
@@ -393,7 +547,7 @@ async function restWithPenalty(actor, pen) {
   } else {
     pendingPenalty.set(actor.id, pen);
     try {
-      await actor.longRest({ dialog: false, chat: true });
+      await actor.longRest({ dialog: false, chat: !quiet });
     } finally {
       pendingPenalty.delete(actor.id);
     }
@@ -404,6 +558,7 @@ async function restWithPenalty(actor, pen) {
   if (pen.malnutrition && hasMalnutrition) {
     await actor.toggleStatusEffect("malnutrition", { active: true });
   }
+  if (quiet) return;
   return postPenalty(actor, pen, penaltyEffects(pen));
 }
 
@@ -465,17 +620,31 @@ class CampRestApp extends ApplicationV2 {
     const cfg = getSupplies();
     const isGM = game.user.isGM;
 
+    const auto = allocateAuto(state, cfg);
     const members = (state.participants ?? []).map((p) => {
       const actor = game.actors.get(p.id);
-      const have = suppliedFor(state, p.id);
-      const required = requiredFor(actor ?? p.id, cfg);
+      const autoPoints = auto.byEntry.get(p.id)?.points ?? 0;
+      const have = suppliedFor(state, p.id) + autoPoints;
+      const required = requiredForEntry(p, state, cfg);
+      let group = null;
+      if (isGroupEntry(p)) {
+        const count = groupNeeds(p.id, state, cfg).length;
+        const source = p.sourceId ? game.actors.get(p.sourceId) : null;
+        group = {
+          info: `${count} Mitglieder${source ? ` · aus „${source.name}“` : ""}`,
+          tip: source
+            ? `${autoPoints} Punkte automatisch aus „${source.name}“ · dort noch ${sourcePoints(source, state, auto)} frei`
+            : "Rationen werden von Hand auf die Karte gelegt"
+        };
+      }
       return {
         id: p.id,
         name: actor?.name ?? p.name,
         img: actor?.img ?? p.img,
         have,
         required,
-        size: sizeLabel(sizeOf(actor)),
+        size: group ? "Gruppe" : sizeLabel(sizeOf(actor)),
+        group,
         ok: have >= required,
         waived: !!state.noPenalty?.[p.id],
         pledges: state.pledges.filter((x) => x.toActorId === p.id).map((x) => ({
@@ -488,7 +657,7 @@ class CampRestApp extends ApplicationV2 {
     const supplies = isGM ? [] : game.actors.filter((a) => a.isOwner)
       .flatMap((a) => a.items.contents.filter((i) => supplyValue(i) > 0).map((i) => ({
         uuid: i.uuid, img: chipImage(i), name: i.name, owner: a.name,
-        left: (Number(i.system.quantity) || 0) - pledgedOf(state, i.uuid)
+        left: (Number(i.system.quantity) || 0) - pledgedOf(state, i.uuid) - (auto.byItem.get(i.uuid) ?? 0)
       })));
 
     const view = await loadView();
